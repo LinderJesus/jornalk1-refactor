@@ -1,0 +1,85 @@
+:root {
+  /* Cores principais - Paleta oceânica */
+  --blue-accent: #0080c7;
+  --blue-accent-hover: #0069a3;
+  --dark-bg-primary: #0f1624;
+  --dark-bg-secondary: #151c28;
+  --dark-card-bg: #1a2130;
+  
+  /* Sombras e efeitos */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+  --shadow-surf: 0 5px 15px rgba(0, 126, 199, 0.07);
+  
+  /* Bordas e arredondamentos */
+  --border-radius-sm: 0.25rem;
+  --border-radius-md: 0.375rem;
+  --border-radius-lg: 0.5rem;
+  --border-radius-xl: 1rem;
+  
+  /* Animações e transições */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.3s ease;
+  --transition-slow: 0.5s ease;
+  
+  /* Z-index layers */
+  --z-below: -1;
+  --z-normal: 1;
+  --z-sticky: 100;
+  --z-popup: 200;
+  --z-modal: 300;
+  --z-overlay: 400;
+}
+
+/* Classes utilitárias para espaçamento consistente */
+.section-spacing {
+  padding-top: 5rem;
+  padding-bottom: 5rem;
+}
+
+.section-spacing-sm {
+  padding-top: 3rem;
+  padding-bottom: 3rem;
+}
+
+/* Efeitos de hover reutilizáveis */
+.hover-float {
+  transition: transform var(--transition-normal);
+}
+
+.hover-float:hover {
+  transform: translateY(-5px);
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(8px);
+}
+
+/* Botões padronizados */
+.btn {
+  padding: 0.5rem 1.25rem;
+  border-radius: var(--border-radius-md);
+  font-weight: 500;
+  transition: all var(--transition-fast);
+}
+
+.btn-primary {
+  background-color: var(--blue-accent);
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: var(--blue-accent-hover);
+}
+
+.btn-outline {
+  border: 1px solid var(--blue-accent);
+  color: var(--blue-accent);
+}
+
+.btn-outline:hover {
+  background-color: var(--blue-accent);
+  color: white;
+}

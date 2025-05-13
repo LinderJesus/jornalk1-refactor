@@ -1,0 +1,14 @@
+{
+  "components\\OptimizedHeader.tsx -> ./SearchModal": {
+    "id": "components\\OptimizedHeader.tsx -> ./SearchModal",
+    "files": []
+  },
+  "pages\\index.tsx -> ../components/HomePage": {
+    "id": "pages\\index.tsx -> ../components/HomePage",
+    "files": []
+  },
+  "pages\\index.tsx -> ../components/Layout": {
+    "id": "pages\\index.tsx -> ../components/Layout",
+    "files": []
+  }
+}

@@ -1,0 +1,1160 @@
+import { useRouter } from 'next/router';
+import { useState, useEffect, useRef } from 'react';
+import Image from 'next/image';
+import Link from 'next/link';
+import { NextSeo } from 'next-seo';
+import { motion } from 'framer-motion';
+import { FaClock, FaUser, FaFacebook, FaTwitter, FaLinkedin, FaWhatsapp, FaBookmark, FaShare, FaEye, FaComment, FaHeart, FaEnvelope, FaRegNewspaper } from 'react-icons/fa';
+import toast from 'react-hot-toast';
+import { Layout, LoadingSpinner, ErrorMessage } from '../../components';
+import axios from 'axios';
+import { getNewsBySlug, getNewsList } from '../../utils/api-client';
+
+// Interface para o artigo de notícias
+interface ArticleData {
+  id: number;
+  title: string;
+  slug: string;
+  location?: string;
+  content: string;
+  excerpt: string;
+  imageUrl: string;
+  date: string;
+  author: string;
+  category: string;
+  categoryId: number;
+  tags: string[];
+  viewCount: number;
+  relatedNews?: ArticleData[];
+}
+
+// Definição do tipo NewsItem para corresponder ao tipo retornado pela API
+interface NewsItem {
+  id: number;
+  title: string;
+  slug: string;
+  content: string;
+  excerpt: string;
+  image_url: string;
+  created_at: string;
+  author_name?: string;
+  category_name: string;
+  category_id: number;
+  view_count?: number;
+}
+
+// Converte NewsItem da API para o formato usado pelo frontend
+const formatArticleData = (item: NewsItem): ArticleData => ({
+  id: item.id,
+  title: item.title,
+  slug: item.slug,
+  location: item.category_name === 'Destinos' ? item.excerpt.split(',')[0] : '',
+  content: item.content,
+  excerpt: item.excerpt,
+  imageUrl: item.image_url || '/images/default-news.jpg',
+  date: new Date(item.created_at).toLocaleDateString('pt-BR', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  }),
+  author: item.author_name || 'Editor JornalK1',
+  category: item.category_name,
+  tags: item.content.split(' ').filter((word: string) => word.startsWith('#')).map((tag: string) => tag.substring(1)) || [],
+  viewCount: item.view_count || 0
+});
+
+const NewsDetailPage = () => {
+  const router = useRouter();
+  const { slug } = router.query;
+  
+  const [article, setArticle] = useState<ArticleData | null>(null);
+  const [relatedNews, setRelatedNews] = useState<ArticleData[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isSharingOpen, setIsSharingOpen] = useState(false);
+  const [isBookmarked, setIsBookmarked] = useState(false);
+  const articleRef = useRef<HTMLDivElement>(null);
+
+  // Buscar dados do artigo
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!slug) return;
+      
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        const response = await axios.get(`/api/news/${slug}`);
+        const articleData = response.data;
+        
+        setArticle(articleData);
+        
+        // Buscar notícias relacionadas
+        if (articleData.categoryId) {
+          const relatedResponse = await axios.get('/api/news', {
+            params: {
+              categoryId: articleData.categoryId,
+              limit: 3,
+              exclude: articleData.id
+            }
+          });
+          
+          setRelatedNews(relatedResponse.data);
+        }
+      } catch (err) {
+        console.error('Erro ao buscar artigo:', err);
+        setError('Não foi possível carregar o artigo. Por favor, tente novamente mais tarde.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchData();
+  }, [slug]);
+
+  // Verificar se o artigo está nos favoritos
+  useEffect(() => {
+    if (!article) return;
+    
+    // Verificar nos favoritos armazenados localmente
+    const bookmarks = JSON.parse(localStorage.getItem('bookmarks') || '[]');
+    const isInBookmarks = bookmarks.some((bookmark: any) => bookmark.id === article.id);
+    setIsBookmarked(isInBookmarks);
+  }, [article]);
+
+  // Funções de interação
+  const toggleBookmark = () => {
+    if (!article) return;
+    
+    const bookmarks = JSON.parse(localStorage.getItem('bookmarks') || '[]');
+    
+    if (isBookmarked) {
+      // Remover dos favoritos
+      const updatedBookmarks = bookmarks.filter((bookmark: any) => bookmark.id !== article.id);
+      localStorage.setItem('bookmarks', JSON.stringify(updatedBookmarks));
+      setIsBookmarked(false);
+      toast.success('Artigo removido dos favoritos');
+    } else {
+      // Adicionar aos favoritos
+      const newBookmark = {
+        id: article.id,
+        title: article.title,
+        slug: article.slug,
+        imageUrl: article.imageUrl,
+        date: article.date,
+        category: article.category
+      };
+      
+      const updatedBookmarks = [...bookmarks, newBookmark];
+      localStorage.setItem('bookmarks', JSON.stringify(updatedBookmarks));
+      setIsBookmarked(true);
+      toast.success('Artigo salvo nos favoritos');
+    }
+  };
+  
+  const shareArticle = (platform: string) => {
+    if (!article) return;
+    
+    const url = `https://jornalk1surf.com.br/noticia/${article.slug}`;
+    const title = article.title;
+    
+    let shareUrl = '';
+    
+    switch (platform) {
+      case 'facebook':
+        shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
+        break;
+      case 'twitter':
+        shareUrl = `https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}`;
+        break;
+      case 'linkedin':
+        shareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`;
+        break;
+      case 'whatsapp':
+        shareUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(title + ' ' + url)}`;
+        break;
+      case 'email':
+        shareUrl = `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(url)}`;
+        break;
+      default:
+        break;
+    }
+    
+    if (shareUrl) {
+      window.open(shareUrl, '_blank');
+    }
+    
+    setIsSharingOpen(false);
+  };
+
+  // Preparando metadata para SEO
+  const seoProps = {
+    title: article ? `${article.title} | JornalK1 Surf` : 'Carregando... | JornalK1 Surf',
+    description: article ? article.excerpt : 'Carregando artigo...',
+    url: article ? `https://jornalk1surf.com.br/noticia/${article.slug}` : '',
+    imageUrl: article ? `https://jornalk1surf.com.br${article.imageUrl}` : ''
+  };
+
+  // Estado de carregamento
+  if (isLoading) {
+    return (
+      <Layout>
+        <NextSeo title="Carregando..." description="Carregando artigo..." />
+        <div className="container mx-auto px-4 py-16 min-h-[60vh] flex items-center justify-center">
+          <div className="flex flex-col items-center justify-center min-h-[40vh]">
+            <div className="relative w-16 h-16">
+              <div className="absolute top-0 left-0 w-full h-full border-4 border-gray-200 dark:border-gray-700 rounded-full"></div>
+              <div className="absolute top-0 left-0 w-full h-full border-4 border-t-primary-500 dark:border-t-primary-400 rounded-full animate-spin"></div>
+            </div>
+            <p className="mt-6 text-lg text-gray-600 dark:text-gray-400 font-medium">Carregando artigo...</p>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+  
+  // Exibe mensagem de erro se houver
+  if (error) {
+    return (
+      <Layout>
+        <NextSeo 
+          title="Erro | JornalK1 Surf" 
+          description="Ocorreu um erro ao carregar o artigo."
+        />
+        <div className="container mx-auto px-4 py-16 min-h-[60vh] flex items-center justify-center">
+          <ErrorMessage 
+            message={error} 
+            variant="alert" 
+            onRetry={() => window.location.reload()} 
+          />
+        </div>
+      </Layout>
+    );
+  }
+
+  // Artigo não encontrado
+  if (!article) {
+    return (
+      <Layout>
+        <NextSeo 
+          title="Artigo não encontrado | JornalK1 Surf" 
+          description="O artigo que você está procurando não existe ou foi removido."
+        />
+        <div className="bg-gray-50 dark:bg-dark-800 min-h-screen flex items-center justify-center transition-colors duration-200">
+          <div className="text-center max-w-lg px-6">
+            <div className="mb-8">
+              <FaRegNewspaper className="w-16 h-16 mx-auto text-gray-300 dark:text-gray-700" />
+            </div>
+            <h1 className="text-3xl font-bold text-gray-800 dark:text-white mb-4">Artigo não encontrado</h1>
+            <p className="text-gray-600 dark:text-gray-400 mb-8 max-w-md">O artigo que você está procurando não existe ou foi removido. Verifique o endereço ou tente novamente mais tarde.</p>
+            <Link href="/" className="bg-primary-600 hover:bg-primary-700 text-white px-6 py-3 rounded-md transition-colors duration-200 inline-flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M9.707 14.707a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 1.414L7.414 9H15a1 1 0 110 2H7.414l2.293 2.293a1 1 0 010 1.414z" clipRule="evenodd" />
+              </svg>
+              Voltar para a página inicial
+            </Link>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  // Renderiza o artigo
+  return (
+    <Layout>
+      <div className="bg-gray-50 dark:bg-dark-800 min-h-screen transition-colors duration-200">
+        <NextSeo 
+          title={seoProps.title} 
+          description={seoProps.description} 
+          canonical={seoProps.url} 
+          openGraph={{
+            title: article.title,
+            description: article.excerpt,
+            url: seoProps.url,
+            type: 'article',
+            article: {
+              publishedTime: article.date,
+              tags: article.tags
+            },
+            images: [
+              {
+                url: seoProps.imageUrl,
+                width: 1200,
+                height: 630,
+                alt: article.title,
+              },
+            ],
+          }}
+        />
+        <div className="container mx-auto px-4 py-8">
+          {/* Breadcrumbs */}
+          <div className="mb-8">
+            <nav className="text-sm text-gray-500 dark:text-gray-400 flex items-center">
+              <Link href="/" className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
+                Home
+              </Link>
+              <span className="mx-2 text-gray-400 dark:text-gray-600">/</span>
+              <Link href="/noticias" className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
+                Notícias
+              </Link>
+              <span className="mx-2 text-gray-400 dark:text-gray-600">/</span>
+              <span className="text-gray-700 dark:text-gray-300 line-clamp-1">{article.title}</span>
+            </nav>
+          </div>
+        
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            {/* Artigo principal */}
+            <div className="lg:col-span-8">
+              <article className="bg-white dark:bg-dark-700 rounded-xl shadow-md overflow-hidden transition-colors duration-200">
+                {/* Imagem do artigo */}
+                <div className="relative h-[300px] md:h-[400px] lg:h-[480px]">
+                  <Image 
+                    src={article.imageUrl}
+                    alt={article.title}
+                    fill
+                    style={{ objectFit: 'cover' }}
+                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 75vw, 65vw"
+                    priority
+                  />
+                </div>
+                
+                {/* Conteúdo */}
+                <div className="p-6 lg:p-8">
+                  {/* Categoria e data */}
+                  <div className="flex flex-wrap items-center mb-4 text-sm">
+                    <Link 
+                      href={`/noticias?categoria=${article.category}`}
+                      className="bg-primary-500/10 text-primary-600 dark:text-primary-400 px-3 py-1 rounded-full font-medium"
+                    >
+                      {article.category}
+                    </Link>
+                    <div className="flex items-center ml-4 text-gray-500 dark:text-gray-400">
+                      <FaClock className="mr-1 text-xs" />
+                      <span>{article.date}</span>
+                    </div>
+                  </div>
+                  
+                  {/* Título */}
+                  <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white mb-4 leading-tight">
+                    {article.title}
+                  </h1>
+                  
+                  {/* Autor e estatísticas */}
+                  <div className="flex flex-wrap items-center gap-4 mb-6 pb-6 border-b border-gray-200 dark:border-gray-700">
+                    <div className="flex items-center">
+                      <div className="w-10 h-10 rounded-full bg-gray-300 dark:bg-gray-600 mr-3 flex items-center justify-center">
+                        <FaUser className="text-gray-500 dark:text-gray-400" />
+                      </div>
+                      <span className="font-medium text-gray-700 dark:text-gray-300">{article.author}</span>
+                    </div>
+                    
+                    <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+                      <FaEye className="mr-1" />
+                      <span>{article.viewCount} visualizações</span>
+                    </div>
+                    
+                    {/* Ações */}
+                    <div className="flex items-center ml-auto gap-2">
+                      <button 
+                        onClick={toggleBookmark}
+                        className={`p-2 rounded-full transition-colors ${
+                          isBookmarked 
+                            ? 'bg-primary-100 text-primary-600 dark:bg-primary-900/30 dark:text-primary-400' 
+                            : 'bg-gray-100 text-gray-600 dark:bg-dark-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-dark-500'
+                        }`}
+                        aria-label={isBookmarked ? 'Remover dos favoritos' : 'Adicionar aos favoritos'}
+                      >
+                        <FaBookmark />
+                      </button>
+                      
+                      <div className="relative">
+                        <button 
+                          onClick={() => setIsSharingOpen(!isSharingOpen)}
+                          className="p-2 bg-gray-100 dark:bg-dark-600 text-gray-600 dark:text-gray-400 rounded-full hover:bg-gray-200 dark:hover:bg-dark-500 transition-colors"
+                          aria-label="Compartilhar"
+                        >
+                          <FaShare />
+                        </button>
+                        
+                        {isSharingOpen && (
+                          <div className="absolute right-0 mt-2 w-48 bg-white dark:bg-dark-600 rounded-lg shadow-lg z-10 p-2">
+                            <div className="flex justify-between items-center">
+                              <button 
+                                onClick={() => shareArticle('facebook')} 
+                                className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full"
+                                aria-label="Compartilhar no Facebook"
+                              >
+                                <FaFacebook size={20} />
+                              </button>
+                              <button 
+                                onClick={() => shareArticle('twitter')} 
+                                className="p-2 text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full"
+                                aria-label="Compartilhar no Twitter"
+                              >
+                                <FaTwitter size={20} />
+                              </button>
+                              <button 
+                                onClick={() => shareArticle('linkedin')} 
+                                className="p-2 text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full"
+                                aria-label="Compartilhar no LinkedIn"
+                              >
+                                <FaLinkedin size={20} />
+                              </button>
+                              <button 
+                                onClick={() => shareArticle('whatsapp')} 
+                                className="p-2 text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-full"
+                                aria-label="Compartilhar no WhatsApp"
+                              >
+                                <FaWhatsapp size={20} />
+                              </button>
+                              <button 
+                                onClick={() => shareArticle('email')} 
+                                className="p-2 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-500 rounded-full"
+                                aria-label="Compartilhar por email"
+                              >
+                                <FaEnvelope size={20} />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Conteúdo do artigo */}
+                  <div 
+                    className="prose prose-lg max-w-none dark:prose-invert prose-headings:text-gray-800 dark:prose-headings:text-white prose-p:text-gray-600 dark:prose-p:text-gray-300 prose-a:text-primary-600 dark:prose-a:text-primary-400 prose-img:rounded-lg"
+                    dangerouslySetInnerHTML={{ __html: article.content }}
+                  />
+                  
+                  {/* Tags */}
+                  {article.tags && article.tags.length > 0 && (
+                    <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+                      <h3 className="text-lg font-semibold text-gray-800 dark:text-white mb-3">Tags</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {article.tags.map((tag, index) => (
+                          <Link 
+                            key={index}
+                            href={`/noticias?tag=${tag}`}
+                            className="bg-gray-100 dark:bg-dark-600 text-gray-600 dark:text-gray-400 px-3 py-1 rounded-full text-sm hover:bg-gray-200 dark:hover:bg-dark-500 transition-colors"
+                          >
+                            {tag}
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </article>
+              
+              {/* Comentários - pode ser implementado posteriormente */}
+              <div className="mt-8 bg-white dark:bg-dark-700 rounded-xl shadow-md p-6 transition-colors duration-200">
+                <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-4">Comentários</h3>
+                <div className="text-center py-8">
+                  <p className="text-gray-600 dark:text-gray-400">Sistema de comentários em desenvolvimento.</p>
+                </div>
+              </div>
+            </div>
+            
+            {/* Sidebar */}
+            <div className="lg:col-span-4">
+              {/* Artigos relacionados */}
+              <div className="bg-white dark:bg-dark-700 rounded-xl shadow-md overflow-hidden transition-colors duration-200">
+                <div className="p-6">
+                  <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-4">Notícias relacionadas</h3>
+                  
+                  {relatedNews.length > 0 ? (
+                    <div className="space-y-4">
+                      {relatedNews.map((news) => (
+                        <div key={news.id} className="group flex gap-3">
+                          <div className="w-20 h-20 relative flex-shrink-0 rounded-md overflow-hidden">
+                            <Image
+                              src={news.imageUrl}
+                              alt={news.title}
+                              fill
+                              style={{ objectFit: 'cover' }}
+                              sizes="80px"
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-medium text-gray-800 dark:text-gray-200 line-clamp-2 mb-1 group-hover:text-primary-500 dark:group-hover:text-primary-400 transition-colors">
+                              <Link href={`/noticia/${news.slug}`}>
+                                {news.title}
+                              </Link>
+                            </h4>
+                            <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+                              <FaClock className="mr-1 text-xs" />
+                              <span>{news.date}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-600 dark:text-gray-400 py-4">Não há notícias relacionadas.</p>
+                  )}
+                  
+                  <div className="mt-6 text-center">
+                    <Link 
+                      href="/noticias" 
+                      className="inline-flex items-center text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium transition-colors"
+                    >
+                      Ver todas as notícias
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M12.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Layout>
+  const router = useRouter();
+  const { slug } = router.query;
+  const [article, setArticle] = useState<ArticleData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [relatedArticles, setRelatedArticles] = useState<ArticleData[]>([]);
+  const [likes, setLikes] = useState(0);
+  const [isBookmarked, setIsBookmarked] = useState(false);
+  const commentRef = useRef<HTMLTextAreaElement>(null);
+  const [comments, setComments] = useState<Array<{id: number; author: string; date: string; content: string; avatar?: string;}>>([{
+    id: 1,
+    author: 'Ana Silva',
+    avatar: '/images/avatar-1.jpg',
+    date: '2 horas atrás',
+    content: 'Incrível ver o surf evoluindo cada vez mais! Grande notícia.'
+  }]);
+  const [showShareOptions, setShowShareOptions] = useState(false);
+  
+  // Mostrar/ocultar opções de compartilhamento
+  const _toggleShareOptions = () => {
+    setShowShareOptions(!showShareOptions);
+  };
+
+  // Animation variants
+  const fadeIn = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.6 } }
+  };
+
+  // Buscar dados da notícia
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!router.isReady || !slug) return;
+      
+      try {
+        setIsLoading(true);
+        setError(null);
+        
+        // Buscar a notícia pelo slug
+        if (typeof slug === 'string') {
+          const response = await getNewsBySlug(slug);
+          
+          if (response.success && response.data) {
+            // Formatar dados da notícia
+            const formattedArticle = formatArticleData(response.data);
+            setArticle(formattedArticle);
+            
+            // Definir curtidas com base nas visualizações (para demonstração)
+            setLikes(Math.floor(response.data.view_count * 0.3) || Math.floor(Math.random() * 50) + 10);
+            
+            // Buscar notícias relacionadas da mesma categoria
+            const relatedResponse = await getNewsList({
+              limit: 2,
+              categoryId: response.data.category_id,
+              // Excluir a notícia atual dos resultados
+              // Esta opção não está implementada no backend ainda,
+              // mas seria uma melhoria futura
+            });
+            
+            if (relatedResponse.success && relatedResponse.data.length > 0) {
+              // Filtrar para remover a notícia atual se ela estiver nos resultados
+              const filtered = relatedResponse.data
+                .filter(item => item.slug !== slug)
+                .map(item => formatArticleData(item));
+              
+              setRelatedArticles(filtered);
+            }
+          } else {
+            setError('Notícia não encontrada');
+          }
+        }
+      } catch (err) {
+        console.error('Erro ao buscar dados da notícia:', err);
+        setError('Ocorreu um erro ao carregar a notícia. Tente novamente mais tarde.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchData();
+  }, [router.isReady, slug]);
+  
+  const handleBookmark = () => {
+    setIsBookmarked(!isBookmarked);
+    toast.success(isBookmarked ? 'Artigo removido dos favoritos' : 'Artigo salvo nos favoritos');
+  };
+  const handleLike = () => {
+    setLikes(likes + 1);
+    toast.success('Obrigado pelo seu apoio!');
+  };
+  
+  const handleShare = (platform: string) => {
+    const url = typeof window !== 'undefined' ? window.location.href : '';
+    const title = article?.title || 'Artigo interessante';
+    
+    switch (platform) {
+      case 'facebook':
+        window.open(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`, '_blank');
+        break;
+      case 'twitter':
+        window.open(`https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}`, '_blank');
+        break;
+      case 'linkedin':
+        window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`, '_blank');
+        break;
+      case 'whatsapp':
+        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(title + ' ' + url)}`, '_blank');
+        break;
+      case 'email':
+        window.open(`mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent('Confira esse artigo: ' + url)}`);
+        break;
+    }
+  };
+
+  const handleSubmitComment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (commentRef.current?.value) {
+      const newComment = {
+        id: comments.length + 1,
+        author: 'Usuário Anônimo',
+        date: new Date().toLocaleDateString('pt-BR'),
+        content: commentRef.current.value,
+        avatar: '/images/avatar-placeholder.jpg'
+      };
+      setComments([...comments, newComment]);
+      commentRef.current.value = '';
+      toast.success('Comentário enviado com sucesso!');
+    }
+  };
+
+  // Recuperar/salvar do localStorage para bookmark
+  useEffect(() => {
+    if (article && typeof window !== 'undefined') {
+      // Verificar se o artigo está nos favoritos
+      const bookmarks = localStorage.getItem('jornalk1_bookmarks');
+      if (bookmarks) {
+        const bookmarksList = JSON.parse(bookmarks) as number[];
+        setIsBookmarked(bookmarksList.includes(article.id));
+      }
+    }
+  }, [article]);
+
+  // Preparando metadata para SEO
+  const seoProps = {
+    title: article ? `${article.title} | JornalK1 Surf` : 'Carregando... | JornalK1 Surf',
+    description: article ? article.excerpt : 'Carregando artigo...',
+    url: article ? `https://jornalk1surf.com.br/noticia/${article.slug}` : '',
+    imageUrl: article ? `https://jornalk1surf.com.br${article.imageUrl}` : ''
+  };
+
+  // Estado de carregamento
+  if (isLoading) {
+    return (
+      <Layout>
+        <NextSeo title="Carregando..." description="Carregando artigo..." />
+        <div className="container mx-auto px-4 py-16 min-h-[60vh] flex items-center justify-center">
+          <div className="flex flex-col items-center justify-center min-h-[40vh]">
+            <div className="relative w-16 h-16">
+              <div className="absolute top-0 left-0 w-full h-full border-4 border-gray-200 dark:border-gray-700 rounded-full"></div>
+              <div className="absolute top-0 left-0 w-full h-full border-4 border-t-primary-500 dark:border-t-primary-400 rounded-full animate-spin"></div>
+            </div>
+            <p className="mt-6 text-lg text-gray-600 dark:text-gray-400 font-medium">Carregando artigo...</p>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  // Exibe mensagem de erro se houver
+  if (error) {
+    return (
+      <Layout>
+        <NextSeo 
+          title="Erro | JornalK1 Surf" 
+          description="Ocorreu um erro ao carregar o artigo."
+        />
+        <div className="container mx-auto px-4 py-16 min-h-[60vh] flex items-center justify-center">
+          <ErrorMessage 
+            message={error} 
+            variant="alert" 
+            onRetry={() => window.location.reload()} 
+          />
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!article) {
+    return (
+      <Layout>
+        <NextSeo 
+          title="Artigo não encontrado | JornalK1 Surf" 
+          description="O artigo que você está procurando não existe ou foi removido."
+        />
+        <div className="bg-gray-50 dark:bg-dark-800 min-h-screen flex items-center justify-center transition-colors duration-200">
+          <div className="text-center max-w-lg px-6">
+            <div className="mb-8">
+              <FaRegNewspaper className="w-16 h-16 mx-auto text-gray-300 dark:text-gray-700" />
+            </div>
+            <h1 className="text-3xl font-bold text-gray-800 dark:text-white mb-4">Artigo não encontrado</h1>
+            <p className="text-gray-600 dark:text-gray-400 mb-8 max-w-md">O artigo que você está procurando não existe ou foi removido. Verifique o endereço ou tente novamente mais tarde.</p>
+            <Link href="/" className="bg-primary-600 hover:bg-primary-700 text-white px-6 py-3 rounded-md transition-colors duration-200 inline-flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M9.707 14.707a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 1.414L7.414 9H15a1 1 0 110 2H7.414l2.293 2.293a1 1 0 010 1.414z" clipRule="evenodd" />
+              </svg>
+              Voltar para a página inicial
+            </Link>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  return (
+    <Layout>
+      <div className="bg-gray-50 dark:bg-dark-800 min-h-screen transition-colors duration-200">
+        <NextSeo 
+          title={seoProps.title} 
+          description={seoProps.description} 
+          canonical={seoProps.url} 
+          openGraph={{
+            title: article.title,
+            description: article.excerpt,
+            url: seoProps.url,
+            type: 'article',
+            article: {
+              publishedTime: article.date,
+              tags: article.tags
+            },
+            images: [
+              {
+                url: seoProps.imageUrl,
+                width: 1200,
+                height: 630,
+                alt: article.title,
+              },
+            ],
+          }}
+        />
+        <div className="container mx-auto px-4 py-8">
+          {/* Breadcrumbs */}
+          <div className="mb-6">
+            <nav className="text-sm text-gray-500 dark:text-gray-400 flex flex-wrap items-center">
+              <Link href="/" className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
+                Home
+              </Link>
+              <span className="mx-2 text-gray-400 dark:text-gray-600">/</span>
+              <Link href={`/categoria/${article.category.toLowerCase()}`} className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors">
+                {article.category}
+              </Link>
+              <span className="mx-2 text-gray-400 dark:text-gray-600">/</span>
+              <span className="text-gray-700 dark:text-gray-300 truncate max-w-[250px] md:max-w-md">{article.title}</span>
+            </nav>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Main Content */}
+            <div className="lg:col-span-2">
+              <motion.article 
+                initial="hidden"
+                animate="visible"
+                variants={{
+                  hidden: { opacity: 0, y: 20 },
+                  visible: { opacity: 1, y: 0, transition: { duration: 0.6 } }
+                }}
+                className="bg-white dark:bg-dark-700 rounded-xl shadow-md overflow-hidden transition-colors duration-200"
+              >
+                {/* Featured Image */}
+                <div className="relative h-64 md:h-[400px] w-full overflow-hidden group">
+                  <Image
+                    src={article?.imageUrl || '/images/placeholder.jpg'}
+                    alt={article?.title || 'Artigo'}
+                    fill
+                    priority
+                    className="object-cover transition-transform duration-700 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-70"></div>
+                  <div className="absolute bottom-0 left-0 p-6 w-full">
+                    {/* Category Badge */}
+                    <Link 
+                      href={`/categoria/${article.category.toLowerCase()}`}
+                      className="inline-block bg-primary-600 dark:bg-primary-500 text-white text-sm font-medium px-3 py-1 rounded-md mb-3 hover:bg-primary-700 dark:hover:bg-primary-600 transition-colors"
+                    >
+                      {article.category}
+                    </Link>
+                    <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white mb-2 drop-shadow-sm">{article.title}</h1>
+                  </div>
+                </div>
+
+                {/* Article Content */}
+                <div className="p-6 md:p-8">
+                  {/* Meta Info */}
+                  <div className="flex flex-wrap items-center text-gray-500 dark:text-gray-400 text-sm mb-6 pb-4 border-b border-gray-100 dark:border-gray-700">
+                    <div className="flex items-center mr-6 mb-2">
+                      <FaClock className="mr-2 text-primary-500" />
+                      <span>{article.date}</span>
+                    </div>
+                    <div className="flex items-center mr-6 mb-2">
+                      <FaUser className="mr-2 text-primary-500" />
+                      <span>Por {article.author}</span>
+                    </div>
+                    <div className="flex items-center mb-2">
+                      <FaEye className="mr-2 text-primary-500" />
+                      <span>{Math.floor(Math.random() * 1000) + 500} visualizações</span>
+                    </div>
+                  </div>
+
+                  {/* Interactive Buttons */}
+                  <div className="flex justify-between items-center mb-8">
+                    <div className="flex space-x-4">
+                      <button 
+                        onClick={handleLike} 
+                        className="flex items-center text-gray-600 dark:text-gray-400 hover:text-primary-500 dark:hover:text-primary-400 transition-colors"
+                      >
+                        <FaHeart className={`mr-2 ${likes > 0 ? 'text-primary-500' : ''}`} />
+                        <span>{likes}</span>
+                      </button>
+                      <button 
+                        className="flex items-center text-gray-600 dark:text-gray-400 hover:text-primary-500 dark:hover:text-primary-400 transition-colors"
+                        onClick={() => document.getElementById('comments-section')?.scrollIntoView({ behavior: 'smooth' })}
+                      >
+                        <FaComment className="mr-2" />
+                        <span>{comments.length}</span>
+                      </button>
+                    </div>
+                    <div className="flex space-x-3">
+                      <button 
+                        onClick={handleBookmark}
+                        className={`p-2 rounded-full ${isBookmarked ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400' : 'bg-gray-100 dark:bg-dark-600 text-gray-600 dark:text-gray-400'} hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors`}
+                        aria-label="Salvar"
+                      >
+                        <FaBookmark size={16} />
+                      </button>
+                      <button 
+                        onClick={() => handleShare('facebook')}
+                        className="p-2 rounded-full bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 transition-colors"
+                        aria-label="Compartilhar no Facebook"
+                      >
+                        <FaFacebook size={16} />
+                      </button>
+                      <button 
+                        onClick={() => handleShare('twitter')}
+                        className="p-2 rounded-full bg-blue-400 text-white flex items-center justify-center hover:bg-blue-500 transition-colors"
+                        aria-label="Compartilhar no Twitter"
+                      >
+                        <FaTwitter size={16} />
+                      </button>
+                      <button 
+                        onClick={() => handleShare('linkedin')}
+                        className="p-2 rounded-full bg-blue-700 text-white flex items-center justify-center hover:bg-blue-800 transition-colors"
+                        aria-label="Compartilhar no LinkedIn"
+                      >
+                        <FaLinkedin size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleShare('whatsapp')}
+                        className="p-2 rounded-full bg-green-500 text-white flex items-center justify-center hover:bg-green-600 transition-colors"
+                        aria-label="Compartilhar no WhatsApp"
+                      >
+                        <FaWhatsapp size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleShare('email')}
+                        className="p-2 rounded-full bg-gray-500 text-white flex items-center justify-center hover:bg-gray-600 transition-colors"
+                        aria-label="Compartilhar por Email"
+                      >
+                        <FaEnvelope size={16} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Content */}
+                  <div 
+                    className="prose prose-lg dark:prose-invert max-w-none prose-headings:text-gray-800 dark:prose-headings:text-white prose-p:text-gray-600 dark:prose-p:text-gray-300 prose-a:text-primary-600 dark:prose-a:text-primary-400 prose-img:rounded-lg"
+                    dangerouslySetInnerHTML={{ __html: article.content }}
+                  />
+
+                  {/* Tags */}
+                  <div className="mt-10 pt-6 border-t border-gray-100 dark:border-gray-700">
+                    <h3 className="text-lg font-semibold mb-3 text-gray-800 dark:text-white">Tags:</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {article.tags.map((tag: string, index: number) => (
+                        <Link
+                          key={index}
+                          href={`/tag/${tag.toLowerCase().replace(/\s+/g, '-')}`}
+                          className="bg-gray-100 dark:bg-dark-600 text-gray-700 dark:text-gray-300 px-3 py-1 rounded-full text-sm hover:bg-primary-100 dark:hover:bg-primary-900/30 hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                        >
+                          {tag}
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Share */}
+                  <div className="mt-8 pt-6 border-t border-gray-100 dark:border-gray-700">
+                    <h3 className="text-lg font-semibold mb-4 text-gray-800 dark:text-white">Compartilhar:</h3>
+                    <div className="flex space-x-3">
+                      <button onClick={() => handleShare('facebook')} className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center hover:bg-blue-700 transition-colors" aria-label="Compartilhar no Facebook">
+                        <FaFacebook size={18} />
+                      </button>
+                      <button onClick={() => handleShare('twitter')} className="w-8 h-8 rounded-full bg-blue-400 text-white flex items-center justify-center hover:bg-blue-500 transition-colors" aria-label="Compartilhar no Twitter">
+                        <FaTwitter size={18} />
+                      </button>
+                      <button onClick={() => handleShare('linkedin')} className="w-8 h-8 rounded-full bg-blue-700 text-white flex items-center justify-center hover:bg-blue-800 transition-colors" aria-label="Compartilhar no LinkedIn">
+                        <FaLinkedin size={18} />
+                      </button>
+                      <button
+                        onClick={() => handleShare('whatsapp')}
+                        className="w-8 h-8 rounded-full bg-green-500 text-white flex items-center justify-center hover:bg-green-600 transition-colors"
+                        aria-label="Compartilhar no WhatsApp"
+                      >
+                        <FaWhatsapp size={18} />
+                      </button>
+                      <button
+                        onClick={() => handleShare('email')}
+                        className="w-8 h-8 rounded-full bg-gray-500 text-white flex items-center justify-center hover:bg-gray-600 transition-colors"
+                        aria-label="Compartilhar por Email"
+                      >
+                        <FaEnvelope size={18} />
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* Comments Section */}
+                  <div id="comments-section" className="mt-10 pt-6 border-t border-gray-100 dark:border-gray-700">
+                    <h3 className="text-xl font-bold mb-6 text-gray-800 dark:text-white">Comentários ({comments.length})</h3>
+                    
+                    {/* Comment Form */}
+                    <form onSubmit={handleSubmitComment} className="mb-8">
+                      <textarea
+                        ref={commentRef}
+                        className="w-full p-4 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-dark-600 text-gray-800 dark:text-gray-200"
+                        rows={4}
+                        placeholder="Deixe seu comentário..."
+                        required
+                      />
+                      <button
+                        type="submit"
+                        className="mt-3 bg-primary-600 hover:bg-primary-700 text-white font-medium px-6 py-2 rounded-md transition-colors"
+                      >
+                        Enviar Comentário
+                      </button>
+                    </form>
+                    
+                    {/* Comments List */}
+                    <div className="space-y-6">
+                      {comments.length > 0 ? (
+                        comments.map((comment) => (
+                          <div key={comment.id} className="flex space-x-4">
+                            <div className="flex-shrink-0">
+                              <div className="relative w-10 h-10 rounded-full overflow-hidden">
+                                <Image
+                                  src={comment.avatar || '/images/avatar-placeholder.jpg'}
+                                  alt={comment.author}
+                                  fill
+                                  className="object-cover"
+                                />
+                              </div>
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center mb-1">
+                                <h4 className="font-medium text-gray-800 dark:text-white mr-2">{comment.author}</h4>
+                                <span className="text-sm text-gray-500 dark:text-gray-400">{comment.date}</span>
+                              </div>
+                              <p className="text-gray-600 dark:text-gray-300">{comment.content}</p>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-gray-500 dark:text-gray-400 text-center py-4">Seja o primeiro a comentar!</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </motion.article>
+            </div>
+
+            {/* Sidebar */}
+            <div className="space-y-8">
+              {/* Author Card */}
+              <div className="bg-white dark:bg-dark-700 rounded-xl shadow-md overflow-hidden transition-colors duration-200">
+                <div className="bg-gradient-to-r from-primary-600 to-primary-400 h-24"></div>
+                <div className="p-6 -mt-12">
+                  <div className="flex justify-center">
+                    <div className="relative w-24 h-24 rounded-full border-4 border-white dark:border-dark-700 overflow-hidden">
+                      <Image
+                        src="/images/avatar-placeholder.jpg"
+                        alt={article?.author || 'Autor'}
+                        fill
+                        className="object-cover"
+                      />
+                    </div>
+                  </div>
+                  <div className="text-center mt-3">
+                    <h3 className="text-lg font-bold text-gray-800 dark:text-white">{article.author}</h3>
+                    <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">Jornalista & Editor</p>
+                    <div className="flex justify-center mt-4 space-x-3">
+                      <a href="#" className="text-gray-500 dark:text-gray-400 hover:text-primary-500 dark:hover:text-primary-400 transition-colors">
+                        <FaTwitter size={16} />
+                      </a>
+                      <a href="#" className="text-gray-500 dark:text-gray-400 hover:text-primary-500 dark:hover:text-primary-400 transition-colors">
+                        <FaLinkedin size={16} />
+                      </a>
+                      <a href="#" className="text-gray-500 dark:text-gray-400 hover:text-primary-500 dark:hover:text-primary-400 transition-colors">
+                        <FaEnvelope size={16} />
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              </div>
+            </div>
+
+            {/* Categories */}
+            <div className="bg-white dark:bg-dark-700 rounded-xl shadow-md p-6 transition-colors duration-200">
+              <h3 className="text-xl font-bold mb-4 pb-2 border-b border-gray-100 dark:border-gray-700 text-gray-800 dark:text-white">
+                Categorias
+              </h3>
+              <ul className="space-y-3">
+                <li>
+                  <Link href="/categorias/politica" className="flex justify-between items-center text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors py-1">
+                    <span>Política</span>
+                    <span className="bg-gray-100 dark:bg-dark-600 text-gray-600 dark:text-gray-400 text-xs px-2 py-1 rounded-full">12</span>
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/categorias/economia" className="flex justify-between items-center text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors py-1">
+                    <span>Economia</span>
+                    <span className="bg-gray-100 dark:bg-dark-600 text-gray-600 dark:text-gray-400 text-xs px-2 py-1 rounded-full">8</span>
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/categorias/tecnologia" className="flex justify-between items-center text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors py-1">
+                    <span>Tecnologia</span>
+                    <span className="bg-gray-100 dark:bg-dark-600 text-gray-600 dark:text-gray-400 text-xs px-2 py-1 rounded-full">15</span>
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/categorias/esportes" className="flex justify-between items-center text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors py-1">
+                    <span>Esportes</span>
+                    <span className="bg-gray-100 dark:bg-dark-600 text-gray-600 dark:text-gray-400 text-xs px-2 py-1 rounded-full">10</span>
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/categorias/entretenimento" className="flex justify-between items-center text-gray-700 dark:text-gray-300 hover:text-primary-600 dark:hover:text-primary-400 transition-colors py-1">
+                    <span>Entretenimento</span>
+                    <span className="bg-gray-100 dark:bg-dark-600 text-gray-600 dark:text-gray-400 text-xs px-2 py-1 rounded-full">6</span>
+                  </Link>
+                </li>
+              </ul>
+            </div>
+
+            {/* Newsletter */}
+            <div className="bg-white dark:bg-dark-700 rounded-xl shadow-md p-6 transition-colors duration-200">
+              <h3 className="text-xl font-bold mb-3 text-gray-800 dark:text-white">
+                Assine nossa Newsletter
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400 mb-4">Receba as últimas notícias diretamente no seu e-mail.</p>
+              <form className="space-y-3">
+                <input 
+                  type="email" 
+                  placeholder="Seu e-mail" 
+                  className="w-full px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white dark:bg-dark-600 text-gray-800 dark:text-gray-200"
+                  required
+                />
+                <button 
+                  type="submit"
+                  className="w-full bg-primary-600 hover:bg-primary-700 text-white font-medium px-4 py-2 rounded-lg transition-colors"
+                >
+                  Inscrever-se
+                </button>
+              </form>
+            </div>
+
+            {/* Tags Cloud */}
+            <div className="bg-white dark:bg-dark-700 rounded-xl shadow-md p-6 transition-colors duration-200">
+              <h3 className="text-xl font-bold mb-4 pb-2 border-b border-gray-100 dark:border-gray-700 text-gray-800 dark:text-white">
+                Tags Populares
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {['Política', 'Economia', 'Tecnologia', 'Saúde', 'Educação', 'Esportes', 'Cultura', 'Meio Ambiente', 'Internacional', 'Ciência'].map((tag, index) => (
+                  <Link
+                    key={index}
+                    href={`/tag/${tag.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '-')}`}
+                    className={`bg-gray-100 dark:bg-dark-600 px-3 py-1 rounded-full text-sm transition-colors ${
+                      index % 3 === 0 
+                        ? 'text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20' 
+                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-dark-500'
+                    }`}
+                  >
+                    {tag}
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            {/* Related Articles */}
+              <div className="bg-white dark:bg-dark-700 rounded-xl shadow-md p-6 transition-colors duration-200">
+                <h3 className="text-xl font-bold mb-4 pb-2 border-b border-gray-100 dark:border-gray-700 text-gray-800 dark:text-white">
+                  Artigos Relacionados
+                </h3>
+                <div className="space-y-6">
+                  {relatedNews.map((news) => (
+                    <div key={news.id} className="flex space-x-4 group">
+                      <div className="flex-shrink-0 relative w-20 h-20 rounded-lg overflow-hidden">
+                        <Image
+                          src={news.imageUrl}
+                          alt={news.title}
+                          fill
+                          className="object-cover transition-transform duration-300 group-hover:scale-110"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-medium text-gray-800 dark:text-gray-200 line-clamp-2 mb-1 group-hover:text-primary-500 dark:group-hover:text-primary-400 transition-colors">
+                          <Link href={`/noticia/${news.slug}`}>
+                            {news.title}
+                          </Link>
+                        </h4>
+                        <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
+                          <FaClock className="mr-1 text-xs" />
+                          <span>{news.date}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-6 text-center">
+                  <Link 
+                    href="/noticias" 
+                    className="inline-flex items-center text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 font-medium transition-colors"
+                  >
+                    Ver todas as notícias
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M12.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+};
+
+export default NewsDetailPage;

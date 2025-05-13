@@ -1,0 +1,14 @@
+{
+  "/_app": "pages/_app.js",
+  "/_document": "pages/_document.js",
+  "/_error": "pages/_error.js",
+  "/": "pages/index.js",
+  "/api/news": "pages/api/news.js",
+  "/api/auth/[...nextauth]": "pages/api/auth/[...nextauth].js",
+  "/404": "pages/404.js",
+  "/admin/login": "pages/admin/login.js",
+  "/admin/cadastro": "pages/admin/cadastro.js",
+  "/contato": "pages/contato.js",
+  "/previsao": "pages/previsao.js",
+  "/categorias/competicoes": "pages/categorias/competicoes.js"
+}

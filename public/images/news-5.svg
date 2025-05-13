@@ -1,0 +1,20 @@
+<svg width="800" height="500" viewBox="0 0 800 500" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7e22ce" />
+      <stop offset="100%" stop-color="#a855f7" />
+    </linearGradient>
+    <pattern id="wavePattern" width="200" height="40" patternUnits="userSpaceOnUse">
+      <path d="M0 20 Q 50 0, 100 20 T 200 20" stroke="rgba(255,255,255,0.2)" fill="none" stroke-width="2" />
+      <path d="M0 40 Q 50 20, 100 40 T 200 40" stroke="rgba(255,255,255,0.2)" fill="none" stroke-width="2" />
+    </pattern>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#bgGradient)" />
+  <rect width="100%" height="100%" fill="url(#wavePattern)" />
+  <g transform="translate(400, 225)">
+    <circle cx="0" cy="0" r="80" fill="rgba(255,255,255,0.2)" />
+    <path d="M-40,-20 Q-20,-40 0,-30 Q20,-40 40,-20 T60,20 Q20,60 -20,40 T-40,-20" fill="#fff" />
+  </g>
+  <text x="50%" y="65%" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#fff">Destinos</text>
+  <text x="50%" y="72%" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" fill="rgba(255,255,255,0.7)">As 10 praias mais desafiadoras para surfistas</text>
+</svg>

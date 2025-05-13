@@ -1,0 +1,9 @@
+Este arquivo serve apenas como marcador para a pasta de imagens.
+
+Para um site em produção, você precisaria adicionar imagens reais para:
+- news-1.jpg até news-12.jpg (para as notícias)
+- category-1.jpg até category-3.jpg (para as categorias)
+- featured-news.jpg (para a notícia em destaque)
+- avatar-placeholder.png (para avatares de usuários)
+
+Estas imagens são referenciadas no código, mas como este é um ambiente de desenvolvimento, você pode substituir estes placeholders por imagens reais quando estiver pronto para produção.

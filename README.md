@@ -118,10 +118,6 @@ theme: {
 }
 ```
 
-## Licença
+## Autor
 
-Este projeto está licenciado sob a licença MIT - veja o arquivo LICENSE para detalhes.
-
-## Suporte
-
-Para suporte, entre em contato pelo email contato@jornalk1.com.br
+Linder Jesus, Linderpvpcontato@gmail.com

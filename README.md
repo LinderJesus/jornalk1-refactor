@@ -118,6 +118,8 @@ theme: {
 }
 ```
 
-## Autor
+## 👨‍💻 Autor
 
-Linder Jesus, Linderpvpcontato@gmail.com
+Criado por [Linder Jesus] - [linderpvpcontato@gmail.com]
+
+---
